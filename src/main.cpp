@@ -17,6 +17,8 @@
 // Provide the RTDB payload printing info and other helper functions.
 #include <addons/RTDBHelper.h>
 
+#define TRIGGER_PIN 13
+
 // Define Firebase Data object
 FirebaseData stream;
 FirebaseData fbdo;
@@ -30,10 +32,15 @@ int count = 0;
 
 volatile bool dataChanged = false;
 
+bool config_mode = false;
+
 void setup()
 {
+    pinMode(TRIGGER_PIN, INPUT_PULLUP);
 
   Serial.begin(115200);
+
+
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
@@ -60,29 +67,43 @@ void setup()
   config.database_url = DATABASE_URL;
 
   // To connect without auth in Test Mode, see Authentications/TestMode/TestMode.ino
+      if ( digitalRead(TRIGGER_PIN) == LOW) {
+        Serial.println("Config mode");
+        config_mode = true;
+    }
+    else {
+        Serial.println("Normal mode");
+        Firebase.begin(&config, &auth);
+        Firebase.reconnectWiFi(true);
+    }
 
-  Firebase.begin(&config, &auth);
-
-  Firebase.reconnectWiFi(true);
 
 }
 
 void loop()
 {
 
-  Firebase.ready(); // should be called repeatedly to handle authentication tasks.
-
   // This is a demo of POSTING data to RTDB using setJSON
-
-  if (Firebase.ready() && (millis() - sendDataPrevMillis > 10000 || sendDataPrevMillis == 0))
+  if(!config_mode) 
   {
+    Firebase.ready(); // should be called repeatedly to handle authentication tasks.
+
+    if (Firebase.ready() && (millis() - sendDataPrevMillis > 15000 || sendDataPrevMillis == 0))
+    {
+      Serial.printf("Available heap: %d bytes\n", ESP.getFreeHeap());
+      sendDataPrevMillis = millis();
+      count++; 
+      FirebaseJson json;
+      json.add("data", "hello");
+      json.add("num", count);
+      Serial.printf("Set json... %s\n\n", Firebase.RTDB.setJSON(&fbdo, "/counter/data/json", &json) ? "ok" : fbdo.errorReason().c_str());
+    }
+  } 
+  else 
+  {
+    Serial.println("Config mode running");
     Serial.printf("Available heap: %d bytes\n", ESP.getFreeHeap());
-    sendDataPrevMillis = millis();
-    count++; 
-    FirebaseJson json;
-    json.add("data", "hello");
-    json.add("num", count);
-    Serial.printf("Set json... %s\n\n", Firebase.RTDB.setJSON(&fbdo, "/counter/data/json", &json) ? "ok" : fbdo.errorReason().c_str());
+    delay(1000);
   }
 
 }
